@@ -2,6 +2,8 @@ const axios = require('axios');
 const { pool } = require('./db');
 
 // ── URLs: switch between sandbox and production ───────────────────────────────
+// MPESA_ENV=production → live Safaricom
+// MPESA_ENV=sandbox    → Safaricom sandbox (test)
 const isProd = (process.env.MPESA_ENV || 'production') === 'production';
 const BASE   = isProd
   ? 'https://api.safaricom.co.ke'
@@ -15,8 +17,8 @@ console.log(`🌍 M-Pesa environment: ${isProd ? 'PRODUCTION' : 'SANDBOX'}`);
 console.log(`🔗 Auth URL: ${AUTH_URL}`);
 
 async function getToken() {
-  const key    = (process.env.MPESA_CONSUMER_KEY    || '').trim();
-  const secret = (process.env.MPESA_CONSUMER_SECRET || '').trim();
+  const key    = (process.env.MPESA_CONSUMER_KEY    || '').trim().replace(/\s/g, '');
+  const secret = (process.env.MPESA_CONSUMER_SECRET || '').trim().replace(/\s/g, '');
 
   if (!key)    throw new Error('MPESA_CONSUMER_KEY is not set');
   if (!secret) throw new Error('MPESA_CONSUMER_SECRET is not set');
@@ -49,15 +51,16 @@ async function getToken() {
 }
 
 function getPasswordAndTimestamp() {
-  const shortcode = (process.env.MPESA_SHORTCODE || '').trim();
-  const passkey   = (process.env.MPESA_PASSKEY   || '').trim();
+  const shortcode = (process.env.MPESA_SHORTCODE || '').trim().replace(/\s/g, '');
+  const passkey   = (process.env.MPESA_PASSKEY   || '').trim().replace(/\s/g, '');
 
   if (!shortcode) throw new Error('MPESA_SHORTCODE is not set');
   if (!passkey)   throw new Error('MPESA_PASSKEY is not set');
 
   const ts  = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
   const raw = `${shortcode}${passkey}${ts}`;
-  console.log(`🔐 Password build | Shortcode: ${shortcode} | Passkey[0..8]: ${passkey.slice(0,8)} | TS: ${ts}`);
+  console.log(`🔐 Password build | Shortcode: ${shortcode} | Passkey len: ${passkey.length} | Passkey[0..8]: ${passkey.slice(0,8)} | TS: ${ts}`);
+  if (passkey.length !== 64) console.warn(`⚠️  Passkey length is ${passkey.length}, expected 64 — check for spaces in Render env var`);
   return { password: Buffer.from(raw).toString('base64'), timestamp: ts };
 }
 
@@ -79,8 +82,8 @@ async function stkPush(phone, amount) {
   const token = await getToken();
   const { password, timestamp } = getPasswordAndTimestamp();
 
-  const shortcode = (process.env.MPESA_SHORTCODE   || '').trim();
-  const till      = (process.env.MPESA_TILL_NUMBER  || '').trim();
+  const shortcode = (process.env.MPESA_SHORTCODE   || '').trim().replace(/\s/g, '');
+  const till      = (process.env.MPESA_TILL_NUMBER  || '').trim().replace(/\s/g, '');
   const callback  = (process.env.MPESA_CALLBACK_URL || '').trim();
 
   if (!callback) throw new Error('MPESA_CALLBACK_URL is not set');

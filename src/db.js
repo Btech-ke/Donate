@@ -95,10 +95,13 @@ async function initDB() {
       );
 
       -- Indexes
-CREATE INDEX IF NOT EXISTS idx_donations_checkout ON donations(checkout_request_id);
-CREATE INDEX IF NOT EXISTS idx_donations_status   ON donations(status);
-CREATE INDEX IF NOT EXISTS idx_ai_session         ON ai_conversations(session_id);
-CREATE INDEX IF NOT EXISTS idx_forum_active       ON forum_posts(is_deleted, created_at);
+      -- Indexes
+     CREATE INDEX IF NOT EXISTS idx_donations_checkout ON donations(checkout_request_id);
+     CREATE INDEX IF NOT EXISTS idx_donations_status ON donations(status);
+     CREATE INDEX IF NOT EXISTS idx_ai_session ON ai_conversations(session_id);
+     CREATE INDEX IF NOT EXISTS idx_forum_active ON forum_posts(created_at);
+    `);
+
     // Safe migrations for existing tables
     await client.query(`ALTER TABLE forum_posts ADD COLUMN IF NOT EXISTS admin_reply TEXT`);
     await client.query(`ALTER TABLE forum_posts ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE`);

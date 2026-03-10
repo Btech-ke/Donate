@@ -1,11 +1,15 @@
 const express = require('express');
 const router  = express.Router();
-const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const { pool } = require('../db');
 
+
+const bcrypt = require('bcrypt');
+
+const match = await bcrypt.compare(password, user.password_hash);
+
 const JWT_SECRET = process.env.JWT_SECRET || 'btechplus-secret-2026';
-const ADMIN_EMAILS = ['admin@btechplus.com', 'btechkenya@gmail.com'];
+const ADMIN_EMAILS = ['admin@btechplus.com','btechplus01@gmail.com', 'btechkenya@gmail.com'];
 
 function makeToken(user) {
   return jwt.sign(

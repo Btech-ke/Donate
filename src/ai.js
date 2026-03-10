@@ -1,6 +1,8 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { pool }  = require('./db');
 
+const localAI = require('./localAI');
+
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
 });
@@ -224,7 +226,7 @@ async function chat(sessionId, userMessage){
 
     console.warn('⚠️ Claude unavailable → using local AI');
 
-    const reply = localFallback(userMessage);
+    const reply = await localAI.ask(userMessage);
 
     return { reply, source:'local' };
 

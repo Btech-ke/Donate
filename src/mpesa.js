@@ -43,21 +43,28 @@ async function stkPush(phone, amount) {
   const token = await getToken();
   const { password, timestamp } = getPasswordAndTimestamp();
 
+  // Use Till Number (BuyGoods) if MPESA_TILL_NUMBER set, else Paybill
+  const useTill = process.env.MPESA_TILL_NUMBER && process.env.MPESA_TILL_NUMBER !== process.env.MPESA_SHORTCODE;
+  const transactionType = useTill ? 'CustomerBuyGoodsOnline' : 'CustomerPayBillOnline';
+  const partyB          = useTill ? process.env.MPESA_TILL_NUMBER : process.env.MPESA_SHORTCODE;
+  const accountRef      = useTill ? 'BTECHPLUS' : 'BTECHPLUS';
+
   const payload = {
     BusinessShortCode: process.env.MPESA_SHORTCODE,
     Password:          password,
     Timestamp:         timestamp,
-    TransactionType:   'CustomerBuyGoodsOnline',
+    TransactionType:   transactionType,
     Amount:            Math.ceil(Number(amount)),
     PartyA:            p,
-    PartyB:            process.env.MPESA_TILL_NUMBER,
+    PartyB:            partyB,
     PhoneNumber:       p,
     CallBackURL:       process.env.MPESA_CALLBACK_URL,
-    AccountReference:  'BTECHPLUS',
+    AccountReference:  accountRef,
     TransactionDesc:   'BTECHPLUS Donation',
   };
 
-  console.log(`📱 STK push → ${p} | KES ${amount}`);
+  console.log(`📱 STK push → ${p} | KES ${amount} | Type: ${transactionType} | PartyB: ${partyB}`);
+  console.log(`📋 Shortcode: ${process.env.MPESA_SHORTCODE} | Till: ${process.env.MPESA_TILL_NUMBER} | Passkey set: ${!!process.env.MPESA_PASSKEY}`);
 
   const res = await axios.post(STK_URL, payload, {
     headers: {

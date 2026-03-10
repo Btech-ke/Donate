@@ -12,8 +12,12 @@ router.post('/stk', async (req, res) => {
     const result = await stkPush(phone, amount);
     res.json(result);
   } catch (err) {
-    console.error('STK error:', err.response?.data || err.message);
-    res.status(500).json({ success:false, error: err.response?.data?.errorMessage || 'M-Pesa request failed' });
+    const safaricomErr = err.response?.data;
+    console.error('STK error status :', err.response?.status);
+    console.error('STK error body   :', JSON.stringify(safaricomErr));
+    console.error('STK error message:', err.message);
+    const userMsg = safaricomErr?.errorMessage || safaricomErr?.ResultDesc || err.message || 'M-Pesa request failed';
+    res.status(500).json({ success:false, error: userMsg, debug: safaricomErr });
   }
 });
 

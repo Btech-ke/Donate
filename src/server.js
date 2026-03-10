@@ -1,33 +1,31 @@
 require('dotenv').config();
-const express = require('express');
-const cors    = require('cors');
-const helmet  = require('helmet');
-const morgan  = require('morgan');
+
+// ── Log all env vars on startup (masked) for debugging ───────────────────────
+console.log('=== BTECHPLUS STARTUP ===');
+console.log('NODE_ENV     :', process.env.NODE_ENV || 'not set');
+console.log('PORT         :', process.env.PORT || '3000 (default)');
+console.log('DATABASE_URL :', process.env.DATABASE_URL
+  ? `SET (${process.env.DATABASE_URL.length} chars)`
+  : '*** NOT SET ***');
+console.log('ANTHROPIC_KEY:', process.env.ANTHROPIC_API_KEY
+  ? `SET (starts: ${process.env.ANTHROPIC_API_KEY.slice(0,12)}...)`
+  : '*** NOT SET ***');
+console.log('MPESA_KEY    :', process.env.MPESA_CONSUMER_KEY ? 'SET' : '*** NOT SET ***');
+console.log('=========================');
+
+const express  = require('express');
+const cors     = require('cors');
+const helmet   = require('helmet');
+const morgan   = require('morgan');
 const { initDB } = require('./db');
 
 const app = express();
 
-// ── CORS — allow btechplus.com + any onrender.com subdomain ──────────────────
-const allowedOrigins = [
-  'https://btechplus.com',
-  'https://www.btechplus.com',
-  'https://donate-erxu.onrender.com',
-  /\.onrender\.com$/,
-  'http://localhost:3000',
-  'http://localhost:5500',
-  'http://127.0.0.1:5500',
-];
-
+// ── Middleware ────────────────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(morgan('combined'));
+app.use(morgan('tiny'));
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // allow server-to-server
-    const ok = allowedOrigins.some(o =>
-      typeof o === 'string' ? o === origin : o.test(origin)
-    );
-    cb(ok ? null : new Error('Not allowed by CORS'), ok);
-  },
+  origin: (origin, cb) => cb(null, true), // open during development; tighten later
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
   credentials: true,
@@ -38,42 +36,33 @@ app.use(express.urlencoded({ extended: true }));
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/', (req, res) => res.json({
   status: 'ok',
-  service: 'BTECHPLUS Campus Pathway API',
+  service: 'BTECHPLUS API',
   version: '1.0.0',
-  timestamp: new Date().toISOString(),
-  endpoints: ['/health', '/api/mpesa/stk', '/api/ai/chat', '/api/forum/posts'],
+  time: new Date().toISOString(),
 }));
 
-app.get('/health', (req, res) => res.json({
-  status: 'healthy',
-  db: 'connected',
-  uptime: process.uptime().toFixed(0) + 's',
-}));
+app.get('/health', (req, res) => res.json({ status: 'healthy', uptime: process.uptime().toFixed(1) + 's' }));
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/mpesa', require('./routes/mpesa.routes'));
 app.use('/api/ai',    require('./routes/ai.routes'));
 app.use('/api/forum', require('./routes/forum.routes'));
 
-// ── 404 ───────────────────────────────────────────────────────────────────────
-app.use((req, res) => res.status(404).json({ error: `Route ${req.method} ${req.path} not found` }));
-
-// ── Global error handler ──────────────────────────────────────────────────────
+// ── 404 + error ───────────────────────────────────────────────────────────────
+app.use((req, res) => res.status(404).json({ error: `Not found: ${req.method} ${req.path}` }));
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err.message);
-  res.status(500).json({ error: 'Internal server error' });
+  console.error('Unhandled:', err.message);
+  res.status(500).json({ error: 'Server error' });
 });
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
+// ── Start ─────────────────────────────────────────────────────────────────────
+const PORT = parseInt(process.env.PORT) || 3000;
 
 initDB()
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 BTECHPLUS API running on port ${PORT}`);
-      console.log(`   Render URL : https://donate-erxu.onrender.com`);
-      console.log(`   Frontend   : ${process.env.FRONTEND_URL}`);
-      console.log(`   M-Pesa CB  : ${process.env.MPESA_CALLBACK_URL}`);
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`   https://donate-erxu.onrender.com`);
     });
   })
   .catch(err => {

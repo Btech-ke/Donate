@@ -7,50 +7,71 @@ const STK_URL   = 'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest';
 const QUERY_URL = 'https://api.safaricom.co.ke/mpesa/stkpushquery/v1/query';
 
 async function getToken() {
-  const cred = Buffer.from(
-    `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
-  ).toString('base64');
+  const key    = process.env.MPESA_CONSUMER_KEY;
+  const secret = process.env.MPESA_CONSUMER_SECRET;
 
-  const res = await axios.get(AUTH_URL, {
-    headers: { Authorization: `Basic ${cred}` },
-    timeout: 12000,
-  });
-  return res.data.access_token;
+  if (!key || !secret) throw new Error('MPESA_CONSUMER_KEY or MPESA_CONSUMER_SECRET not set in environment');
+
+  console.log(`🔑 Getting token | Key starts: ${key.slice(0,8)}... | Secret starts: ${secret.slice(0,6)}...`);
+
+  const cred = Buffer.from(`${key}:${secret}`).toString('base64');
+
+  try {
+    const res = await axios.get(AUTH_URL, {
+      headers: { Authorization: `Basic ${cred}` },
+      timeout: 15000,
+    });
+    console.log('✅ Token obtained');
+    return res.data.access_token;
+  } catch (err) {
+    console.error('❌ TOKEN ERROR status:', err.response?.status);
+    console.error('❌ TOKEN ERROR body:', JSON.stringify(err.response?.data));
+    throw new Error(`Safaricom auth failed: ${err.response?.status} — ${JSON.stringify(err.response?.data)}`);
+  }
 }
 
 function getPasswordAndTimestamp() {
-  const ts       = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
-  const raw      = `${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${ts}`;
-  const password = Buffer.from(raw).toString('base64');
+  const shortcode = process.env.MPESA_SHORTCODE;
+  const passkey   = process.env.MPESA_PASSKEY;
+  const ts        = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+  const raw       = `${shortcode}${passkey}${ts}`;
+  const password  = Buffer.from(raw).toString('base64');
+  console.log(`🔐 Shortcode: ${shortcode} | Passkey starts: ${passkey?.slice(0,8)}... | TS: ${ts}`);
   return { password, timestamp: ts };
 }
 
 function normalisePhone(raw) {
   let p = String(raw).replace(/\D/g, '');
   if (p.startsWith('0'))    p = '254' + p.slice(1);
-  if (p.startsWith('254') && p.length === 12) return p;
   if (p.startsWith('+254')) p = p.slice(1);
   return p;
 }
 
-// ── STK Push ──────────────────────────────────────────────────────────────────
 async function stkPush(phone, amount) {
   const p = normalisePhone(phone);
+  console.log(`📱 Normalised phone: ${p}`);
+
   if (!/^2547\d{8}$|^2541\d{8}$/.test(p)) {
-    throw new Error(`Invalid phone number: ${phone}`);
+    throw new Error(`Invalid phone number after normalisation: ${p}`);
   }
 
   const token = await getToken();
   const { password, timestamp } = getPasswordAndTimestamp();
 
-  // Use Till Number (BuyGoods) if MPESA_TILL_NUMBER set, else Paybill
-  const useTill = process.env.MPESA_TILL_NUMBER && process.env.MPESA_TILL_NUMBER !== process.env.MPESA_SHORTCODE;
+  const shortcode = process.env.MPESA_SHORTCODE;
+  const till      = process.env.MPESA_TILL_NUMBER;
+  const callback  = process.env.MPESA_CALLBACK_URL;
+
+  // If till number is set and different from shortcode → BuyGoods (till)
+  // If same or not set → PayBill
+  const useTill        = till && till !== shortcode;
   const transactionType = useTill ? 'CustomerBuyGoodsOnline' : 'CustomerPayBillOnline';
-  const partyB          = useTill ? process.env.MPESA_TILL_NUMBER : process.env.MPESA_SHORTCODE;
-  const accountRef      = useTill ? 'BTECHPLUS' : 'BTECHPLUS';
+  const partyB          = useTill ? till : shortcode;
+
+  console.log(`📋 TransactionType: ${transactionType} | PartyB: ${partyB} | Amount: ${Math.ceil(amount)} | Callback: ${callback}`);
 
   const payload = {
-    BusinessShortCode: process.env.MPESA_SHORTCODE,
+    BusinessShortCode: shortcode,
     Password:          password,
     Timestamp:         timestamp,
     TransactionType:   transactionType,
@@ -58,44 +79,48 @@ async function stkPush(phone, amount) {
     PartyA:            p,
     PartyB:            partyB,
     PhoneNumber:       p,
-    CallBackURL:       process.env.MPESA_CALLBACK_URL,
-    AccountReference:  accountRef,
+    CallBackURL:       callback,
+    AccountReference:  'BTECHPLUS',
     TransactionDesc:   'BTECHPLUS Donation',
   };
 
-  console.log(`📱 STK push → ${p} | KES ${amount} | Type: ${transactionType} | PartyB: ${partyB}`);
-  console.log(`📋 Shortcode: ${process.env.MPESA_SHORTCODE} | Till: ${process.env.MPESA_TILL_NUMBER} | Passkey set: ${!!process.env.MPESA_PASSKEY}`);
+  try {
+    const res = await axios.post(STK_URL, payload, {
+      headers: {
+        Authorization:  `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 25000,
+    });
 
-  const res = await axios.post(STK_URL, payload, {
-    headers: {
-      Authorization:  `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    timeout: 20000,
-  });
+    const d = res.data;
+    console.log('📲 STK response:', JSON.stringify(d));
 
-  const d = res.data;
-  if (d.ResponseCode !== '0') {
-    throw new Error(d.ResponseDescription || 'STK push rejected');
+    if (d.ResponseCode !== '0') {
+      throw new Error(d.ResponseDescription || 'STK push rejected');
+    }
+
+    await pool.query(
+      `INSERT INTO donations (phone, amount, merchant_request_id, checkout_request_id, status)
+       VALUES ($1, $2, $3, $4, 'PENDING')
+       ON CONFLICT (checkout_request_id) DO NOTHING`,
+      [p, Math.ceil(amount), d.MerchantRequestID, d.CheckoutRequestID]
+    );
+
+    return {
+      success:           true,
+      checkoutRequestId: d.CheckoutRequestID,
+      merchantRequestId: d.MerchantRequestID,
+      message:           d.CustomerMessage || 'Check your phone and enter M-Pesa PIN',
+    };
+
+  } catch (stkErr) {
+    console.error('❌ STK PUSH ERROR status:', stkErr.response?.status);
+    console.error('❌ STK PUSH ERROR body:  ', JSON.stringify(stkErr.response?.data));
+    throw stkErr;
   }
-
-  // Save pending donation
-  await pool.query(
-    `INSERT INTO donations (phone, amount, merchant_request_id, checkout_request_id, status)
-     VALUES ($1, $2, $3, $4, 'PENDING')
-     ON CONFLICT (checkout_request_id) DO NOTHING`,
-    [p, Math.ceil(amount), d.MerchantRequestID, d.CheckoutRequestID]
-  );
-
-  return {
-    success:           true,
-    checkoutRequestId: d.CheckoutRequestID,
-    merchantRequestId: d.MerchantRequestID,
-    message:           d.CustomerMessage || 'Check your phone and enter M-Pesa PIN',
-  };
 }
 
-// ── Safaricom callback ────────────────────────────────────────────────────────
 async function handleCallback(body) {
   const stk = body?.Body?.stkCallback;
   if (!stk) return console.warn('⚠️  Invalid callback body');
@@ -105,8 +130,8 @@ async function handleCallback(body) {
   const desc       = stk.ResultDesc;
 
   if (code === 0) {
-    const items  = stk.CallbackMetadata?.Item || [];
-    const get    = (name) => items.find(i => i.Name === name)?.Value ?? null;
+    const items   = stk.CallbackMetadata?.Item || [];
+    const get     = (name) => items.find(i => i.Name === name)?.Value ?? null;
     const receipt = get('MpesaReceiptNumber');
     const amount  = get('Amount');
     const phone   = String(get('PhoneNumber') || '');
@@ -129,7 +154,6 @@ async function handleCallback(body) {
   }
 }
 
-// ── Query status from Safaricom ───────────────────────────────────────────────
 async function queryStatus(checkoutRequestId) {
   const token = await getToken();
   const { password, timestamp } = getPasswordAndTimestamp();
@@ -141,7 +165,7 @@ async function queryStatus(checkoutRequestId) {
     CheckoutRequestID: checkoutRequestId,
   }, {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    timeout: 12000,
+    timeout: 15000,
   });
 
   return res.data;

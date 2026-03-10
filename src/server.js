@@ -10,7 +10,19 @@ console.log('DATABASE_URL :', process.env.DATABASE_URL
 console.log('ANTHROPIC_KEY:', process.env.ANTHROPIC_API_KEY
   ? `SET (starts: ${process.env.ANTHROPIC_API_KEY.slice(0,12)}...)`
   : '*** NOT SET ***');
-console.log('MPESA_KEY    :', process.env.MPESA_CONSUMER_KEY ? 'SET' : '*** NOT SET ***');
+console.log('MPESA_KEY    :', process.env.MPESA_CONSUMER_KEY
+  ? `SET (${process.env.MPESA_CONSUMER_KEY.length} chars, starts: ${process.env.MPESA_CONSUMER_KEY.slice(0,8)}...)`
+  : '*** NOT SET ***');
+console.log('MPESA_SECRET :', process.env.MPESA_CONSUMER_SECRET
+  ? `SET (${process.env.MPESA_CONSUMER_SECRET.length} chars)`
+  : '*** NOT SET ***');
+console.log('MPESA_SHORT  :', process.env.MPESA_SHORTCODE || '*** NOT SET ***');
+console.log('MPESA_TILL   :', process.env.MPESA_TILL_NUMBER || '*** NOT SET ***');
+console.log('MPESA_PASSKEY:', process.env.MPESA_PASSKEY
+  ? `SET (${process.env.MPESA_PASSKEY.length} chars)`
+  : '*** NOT SET ***');
+console.log('MPESA_CB_URL :', process.env.MPESA_CALLBACK_URL || '*** NOT SET ***');
+console.log('MPESA_ENV    :', process.env.MPESA_ENV || 'production (default)');
 console.log('=========================');
 
 const express  = require('express');

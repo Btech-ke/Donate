@@ -1,85 +1,69 @@
 require('dotenv').config();
 
-// ── Log all env vars on startup (masked) for debugging ───────────────────────
-console.log('=== BTECHPLUS STARTUP ===');
+console.log('=== BTECHPLUS v2.0 STARTUP ===');
 console.log('NODE_ENV     :', process.env.NODE_ENV || 'not set');
-console.log('PORT         :', process.env.PORT || '3000 (default)');
-console.log('DATABASE_URL :', process.env.DATABASE_URL
-  ? `SET (${process.env.DATABASE_URL.length} chars)`
-  : '*** NOT SET ***');
-console.log('ANTHROPIC_KEY:', process.env.ANTHROPIC_API_KEY
-  ? `SET (starts: ${process.env.ANTHROPIC_API_KEY.slice(0,12)}...)`
-  : '*** NOT SET ***');
-console.log('MPESA_KEY    :', process.env.MPESA_CONSUMER_KEY
-  ? `SET (${process.env.MPESA_CONSUMER_KEY.length} chars, starts: ${process.env.MPESA_CONSUMER_KEY.slice(0,8)}...)`
-  : '*** NOT SET ***');
-console.log('MPESA_SECRET :', process.env.MPESA_CONSUMER_SECRET
-  ? `SET (${process.env.MPESA_CONSUMER_SECRET.length} chars)`
-  : '*** NOT SET ***');
+console.log('PORT         :', process.env.PORT || '3000');
+console.log('DATABASE_URL :', process.env.DATABASE_URL ? `SET (${process.env.DATABASE_URL.length} chars)` : '*** NOT SET ***');
+console.log('ANTHROPIC_KEY:', process.env.ANTHROPIC_API_KEY ? `SET (starts: ${process.env.ANTHROPIC_API_KEY.slice(0,12)}...)` : '*** NOT SET ***');
+console.log('MPESA_KEY    :', process.env.MPESA_CONSUMER_KEY ? `SET (${process.env.MPESA_CONSUMER_KEY.length} chars, starts: ${process.env.MPESA_CONSUMER_KEY.slice(0,8)}...)` : '*** NOT SET ***');
+console.log('MPESA_SECRET :', process.env.MPESA_CONSUMER_SECRET ? `SET (${process.env.MPESA_CONSUMER_SECRET.length} chars)` : '*** NOT SET ***');
 console.log('MPESA_SHORT  :', process.env.MPESA_SHORTCODE || '*** NOT SET ***');
 console.log('MPESA_TILL   :', process.env.MPESA_TILL_NUMBER || '*** NOT SET ***');
-console.log('MPESA_PASSKEY:', process.env.MPESA_PASSKEY
-  ? `SET (${process.env.MPESA_PASSKEY.length} chars)`
-  : '*** NOT SET ***');
+console.log('MPESA_PASSKEY:', process.env.MPESA_PASSKEY ? `SET (${process.env.MPESA_PASSKEY.length} chars)` : '*** NOT SET ***');
 console.log('MPESA_CB_URL :', process.env.MPESA_CALLBACK_URL || '*** NOT SET ***');
 console.log('MPESA_ENV    :', process.env.MPESA_ENV || 'production (default)');
-console.log('=========================');
+console.log('JWT_SECRET   :', process.env.JWT_SECRET ? 'SET' : 'using default (set JWT_SECRET in Render!)');
+console.log('==============================');
 
 const express  = require('express');
 const cors     = require('cors');
 const helmet   = require('helmet');
 const morgan   = require('morgan');
 const { initDB } = require('./db');
+const authRoutes      = require('./routes/auth.routes');
+const deadlineRoutes  = require('./routes/deadlines.routes');
 
 const app = express();
 
-// ── Middleware ────────────────────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(morgan('tiny'));
 app.use(cors({
-  origin: (origin, cb) => cb(null, true), // open during development; tighten later
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
+  origin: ['https://btechplus.com', 'http://localhost:3000', 'http://127.0.0.1:5500', /\.btechplus\.com$/],
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '2mb' }));
+app.use(morgan('combined'));
 
-// ── Health ────────────────────────────────────────────────────────────────────
-app.get('/', (req, res) => res.json({
-  status: 'ok',
-  service: 'BTECHPLUS API',
-  version: '1.0.0',
-  time: new Date().toISOString(),
-}));
+// Routes
+const { router: authRouter }  = require('./routes/auth.routes');
+const mpesaRouter   = require('./routes/mpesa.routes');
+const aiRouter      = require('./routes/ai.routes');
+const forumRouter   = require('./routes/forum.routes');
+const adminRouter   = require('./routes/admin.routes');
+const bookingsRouter = require('./routes/bookings.routes');
 
-app.get('/health', (req, res) => res.json({ status: 'healthy', uptime: process.uptime().toFixed(1) + 's' }));
+app.use('/api/auth',     authRouter);
+app.use('/api/mpesa',    mpesaRouter);
+app.use('/api/ai',       aiRouter);
+app.use('/api/forum',    forumRouter);
+app.use('/api/admin',    adminRouter);
+app.use('/api/bookings', bookingsRouter);
 
-// ── Routes ────────────────────────────────────────────────────────────────────
-app.use('/api/mpesa', require('./routes/mpesa.routes'));
-app.use('/api/ai',    require('./routes/ai.routes'));
-app.use('/api/forum', require('./routes/forum.routes'));
+app.get('/', (req, res) => res.json({ service: 'BTECHPLUS API v2.0', status: 'online', docs: '/api/health' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '2.0.0', time: new Date().toISOString() }));
+app.use((req, res) => res.status(404).json({ error: `Route ${req.path} not found` }));
 
-// ── 404 + error ───────────────────────────────────────────────────────────────
-app.use((req, res) => res.status(404).json({ error: `Not found: ${req.method} ${req.path}` }));
-app.use((err, req, res, next) => {
-  console.error('Unhandled:', err.message);
-  res.status(500).json({ error: 'Server error' });
-});
-
-// ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.PORT) || 3000;
 
 initDB()
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`   https://donate-erxu.onrender.com`);
+      console.log(`🚀 BTECHPLUS API v2 running on port ${PORT}`);
+      console.log(`https://donate-erxu.onrender.com`);
     });
   })
   .catch(err => {
-    console.error('💥 Startup failed:', err.message);
+    console.error('❌ Startup failed:', err.message);
     process.exit(1);
   });
-
-module.exports = app;

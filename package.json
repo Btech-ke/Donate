@@ -1,15 +1,13 @@
 {
   "name": "btechplus-backend",
-  "version": "1.0.0",
-  "description": "BTECHPLUS Campus Pathway Backend — M-Pesa, AI, Forum",
+  "version": "2.0.0",
+  "description": "BTECHPLUS Campus Pathway Backend",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js"
   },
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "engines": { "node": ">=18.0.0" },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
@@ -18,6 +16,8 @@
     "dotenv": "^16.3.1",
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
-    "@anthropic-ai/sdk": "^0.20.0"
+    "@anthropic-ai/sdk": "^0.20.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
   }
 }

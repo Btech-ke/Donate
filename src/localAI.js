@@ -1,5 +1,5 @@
-const use = require('@tensorflow-models/universal-sentence-encoder');
-const tf = require('@tensorflow/tfjs-node');
+// const use = require('@tensorflow-models/universal-sentence-encoder');
+// const tf = require('@tensorflow/tfjs-node');
 
 let model;
 

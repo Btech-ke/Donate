@@ -28,7 +28,6 @@ function makeToken(user) {
 function authMiddleware(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.replace('Bearer ', '');
-
   if (!token) return res.status(401).json({ error: 'No token provided' });
 
   try {
@@ -46,8 +45,10 @@ function adminMiddleware(req, res, next) {
   next();
 }
 
+// ------------------ REGISTER ------------------
 router.post('/register', async (req, res) => {
   try {
+    console.log('Register request body:', req.body);
 
     const { username, email, password, grade, cluster, county } = req.body;
 
@@ -69,7 +70,6 @@ router.post('/register', async (req, res) => {
     }
 
     const hash = await bcrypt.hash(password, 10);
-
     const is_admin = ADMIN_EMAILS.includes(email.toLowerCase());
 
     const result = await pool.query(
@@ -100,16 +100,15 @@ router.post('/register', async (req, res) => {
     });
 
   } catch (err) {
-
     console.error('Register error:', err.message);
-
     res.status(500).json({ error: err.message });
-
   }
 });
 
+// ------------------ LOGIN ------------------
 router.post('/login', async (req, res) => {
   try {
+    console.log('Login request body:', req.body);
 
     const { email, password } = req.body;
 
@@ -127,21 +126,14 @@ router.post('/login', async (req, res) => {
     }
 
     const user = result.rows[0];
-
-    const passwordMatch = await bcrypt.compare(
-      password,
-      user.password_hash
-    );
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
     if (ADMIN_EMAILS.includes(email.toLowerCase()) && !user.is_admin) {
-      await pool.query(
-        'UPDATE users SET is_admin=TRUE WHERE id=$1',
-        [user.id]
-      );
+      await pool.query('UPDATE users SET is_admin=TRUE WHERE id=$1', [user.id]);
       user.is_admin = true;
     }
 
@@ -164,17 +156,14 @@ router.post('/login', async (req, res) => {
     });
 
   } catch (err) {
-
     console.error('Login error:', err.message);
-
     res.status(500).json({ error: err.message });
-
   }
 });
 
+// ------------------ GET CURRENT USER ------------------
 router.get('/me', authMiddleware, async (req, res) => {
   try {
-
     const result = await pool.query(
       `SELECT id, username, email, is_admin, grade, cluster, county, created_at
        FROM users
@@ -189,15 +178,13 @@ router.get('/me', authMiddleware, async (req, res) => {
     res.json({ user: result.rows[0] });
 
   } catch (err) {
-
     res.status(500).json({ error: err.message });
-
   }
 });
 
+// ------------------ UPDATE PROFILE ------------------
 router.patch('/profile', authMiddleware, async (req, res) => {
   try {
-
     const { grade, cluster, county, username } = req.body;
 
     await pool.query(
@@ -213,9 +200,7 @@ router.patch('/profile', authMiddleware, async (req, res) => {
     res.json({ success: true });
 
   } catch (err) {
-
     res.status(500).json({ error: err.message });
-
   }
 });
 

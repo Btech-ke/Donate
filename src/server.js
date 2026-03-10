@@ -20,22 +20,7 @@ const cors     = require('cors');
 const helmet   = require('helmet');
 const morgan   = require('morgan');
 const { initDB } = require('./db');
-const authRoutes      = require('./routes/auth.routes');
-const deadlineRoutes  = require('./routes/deadlines.routes');
 
-const app = express();
-
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({
-  origin: ['https://btechplus.com', 'http://localhost:3000', 'http://127.0.0.1:5500', /\.btechplus\.com$/],
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-}));
-app.use(express.json({ limit: '2mb' }));
-app.use(morgan('combined'));
-
-// Routes
 const { router: authRouter }  = require('./routes/auth.routes');
 const mpesaRouter   = require('./routes/mpesa.routes');
 const aiRouter      = require('./routes/ai.routes');
@@ -43,6 +28,24 @@ const forumRouter   = require('./routes/forum.routes');
 const adminRouter   = require('./routes/admin.routes');
 const bookingsRouter = require('./routes/bookings.routes');
 
+const app = express();
+
+// ---------------- MIDDLEWARE ----------------
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(cors({
+  origin: ['https://btechplus.com', 'http://localhost:3000', 'http://127.0.0.1:5500', /\.btechplus\.com$/],
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+}));
+
+// Parse JSON and form-urlencoded
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+app.use(morgan('combined'));
+
+// ---------------- ROUTES ----------------
 app.use('/api/auth',     authRouter);
 app.use('/api/mpesa',    mpesaRouter);
 app.use('/api/ai',       aiRouter);
@@ -52,8 +55,11 @@ app.use('/api/bookings', bookingsRouter);
 
 app.get('/', (req, res) => res.json({ service: 'BTECHPLUS API v2.0', status: 'online', docs: '/api/health' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '2.0.0', time: new Date().toISOString() }));
+
+// 404 handler
 app.use((req, res) => res.status(404).json({ error: `Route ${req.path} not found` }));
 
+// ---------------- START SERVER ----------------
 const PORT = parseInt(process.env.PORT) || 3000;
 
 initDB()

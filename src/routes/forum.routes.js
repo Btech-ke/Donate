@@ -34,4 +34,22 @@ router.post('/posts/:id/like', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /api/forum/posts/:id/reply  — admin reply
+router.post('/posts/:id/reply', async (req, res) => {
+  try {
+    const { reply } = req.body;
+    if (!reply) return res.status(400).json({ error: 'reply text required' });
+    await pool.query(`UPDATE forum_posts SET admin_reply=$1 WHERE id=$2`, [reply.trim(), req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /api/forum/posts/:id  — admin delete
+router.delete('/posts/:id', async (req, res) => {
+  try {
+    await pool.query(`UPDATE forum_posts SET is_deleted=TRUE WHERE id=$1`, [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

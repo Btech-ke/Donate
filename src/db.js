@@ -95,11 +95,10 @@ async function initDB() {
       );
 
       -- Indexes
-      -- Indexes
-     CREATE INDEX IF NOT EXISTS idx_donations_checkout ON donations(checkout_request_id);
-     CREATE INDEX IF NOT EXISTS idx_donations_status ON donations(status);
-     CREATE INDEX IF NOT EXISTS idx_ai_session ON ai_conversations(session_id);
-     CREATE INDEX IF NOT EXISTS idx_forum_active ON forum_posts(created_at);
+      CREATE INDEX IF NOT EXISTS idx_donations_checkout ON donations(checkout_request_id);
+      CREATE INDEX IF NOT EXISTS idx_donations_status   ON donations(status);
+      CREATE INDEX IF NOT EXISTS idx_ai_session         ON ai_conversations(session_id);
+      CREATE INDEX IF NOT EXISTS idx_forum_active       ON forum_posts(is_deleted, created_at DESC);
     `);
 
     // Safe migrations for existing tables

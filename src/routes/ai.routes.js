@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const { chat, getHistory } = require('../ai');
+const { pool } = require('../db');
 
 // POST /api/ai/chat
 router.post('/chat', async (req, res) => {
@@ -22,6 +23,36 @@ router.get('/history/:sessionId', async (req, res) => {
   try {
     const history = await getHistory(req.params.sessionId);
     res.json(history);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/ai/sessions — list all sessions for admin
+router.get('/sessions', async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT session_id,
+             COUNT(*) as message_count,
+             MAX(created_at) as last_active,
+             (SELECT content FROM ai_conversations c2 WHERE c2.session_id = c.session_id AND c2.role='user' ORDER BY created_at DESC LIMIT 1) as last_message
+      FROM ai_conversations c
+      GROUP BY session_id
+      ORDER BY last_active DESC
+      LIMIT 100
+    `);
+    res.json(r.rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/ai/admin-reply — inject admin reply into a session
+router.post('/admin-reply', async (req, res) => {
+  try {
+    const { sessionId, reply } = req.body;
+    if (!sessionId || !reply) return res.status(400).json({ error: 'sessionId and reply required' });
+    await pool.query(
+      `INSERT INTO ai_conversations (session_id, role, content) VALUES ($1, 'assistant', $2)`,
+      [sessionId, '[ADMIN] ' + reply.trim()]
+    );
+    res.json({ success: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 

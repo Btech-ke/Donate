@@ -3,7 +3,6 @@ const router  = express.Router();
 const { pool } = require('../db');
 const { authMiddleware, adminMiddleware } = require('./auth.routes');
 
-const auth  = authMiddleware;
 const admin = [authMiddleware, adminMiddleware];
 
 // ── DASHBOARD STATS ──────────────────────────────────────────────────────────
@@ -17,11 +16,11 @@ router.get('/stats', admin, async (req, res) => {
       pool.query(`SELECT COUNT(DISTINCT session_id) c FROM ai_conversations`),
     ]);
     res.json({
-      donations:      { count: +donations.rows[0].c, total: +donations.rows[0].total },
-      users:          +users.rows[0].c,
-      forum_posts:    +posts.rows[0].c,
+      donations:        { count: +donations.rows[0].c, total: +donations.rows[0].total },
+      users:            +users.rows[0].c,
+      forum_posts:      +posts.rows[0].c,
       pending_bookings: +bookings.rows[0].c,
-      ai_sessions:    +sessions.rows[0].c,
+      ai_sessions:      +sessions.rows[0].c,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -41,7 +40,8 @@ router.get('/donations', admin, async (req, res) => {
 router.get('/users', admin, async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, username, email, is_admin, grade, cluster, county, created_at FROM users ORDER BY created_at DESC`
+      `SELECT id, username, email, is_admin, grade, cluster, county, created_at
+       FROM users ORDER BY created_at DESC`
     );
     res.json(r.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -60,6 +60,7 @@ router.get('/forum', admin, async (req, res) => {
     const r = await pool.query(
       `SELECT fp.*, u.email FROM forum_posts fp
        LEFT JOIN users u ON fp.user_id = u.id
+       WHERE fp.is_deleted = FALSE
        ORDER BY fp.created_at DESC LIMIT 200`
     );
     res.json(r.rows);
@@ -88,7 +89,6 @@ router.get('/chats', admin, async (req, res) => {
     const r = await pool.query(
       `SELECT session_id,
               COUNT(*) FILTER (WHERE role='user') AS user_msgs,
-              COUNT(*) FILTER (WHERE escalated=TRUE) AS escalated,
               MIN(created_at) AS started,
               MAX(created_at) AS last_active,
               (SELECT content FROM ai_conversations a2
@@ -117,27 +117,27 @@ router.post('/chats/:sessionId/reply', admin, async (req, res) => {
   try {
     const { reply } = req.body;
     if (!reply) return res.status(400).json({ error: 'Reply required' });
-    // Insert admin reply into conversation
     await pool.query(
       `INSERT INTO ai_conversations (session_id, role, content, escalated)
-       VALUES ($1, 'admin', $2, FALSE)`,
-      [req.params.sessionId, reply]
-    );
-    // Mark session as handled
-    await pool.query(
-      `UPDATE ai_conversations SET escalated=FALSE WHERE session_id=$1 AND escalated=TRUE`,
-      [req.params.sessionId]
+       VALUES ($1, 'assistant', $2, FALSE)`,
+      [req.params.sessionId, '[ADMIN] ' + reply.trim()]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── DEADLINES ────────────────────────────────────────────────────────────────
-router.get('/deadlines', async (req, res) => {  // Public — no admin required
+router.get('/deadlines', async (req, res) => {  // Public — no auth needed
   try {
-    const r = await pool.query(`SELECT * FROM deadlines ORDER BY deadline ASC`);
+    const r = await pool.query(
+      `SELECT id, title, description, deadline, type, status, link, created_at
+       FROM deadlines ORDER BY deadline ASC`
+    );
     res.json(r.rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('GET /admin/deadlines error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/deadlines', admin, async (req, res) => {
@@ -147,10 +147,14 @@ router.post('/deadlines', admin, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO deadlines (title, description, deadline, type, status, link)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [title, description, deadline, type || 'KUCCPS', status || 'OPEN', link]
+      [title, description || '', deadline, type || 'KUCCPS', status || 'OPEN', link || null]
     );
-    res.json(r.rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    console.log(`📅 Admin added deadline: ${title}`);
+    res.json({ success: true, id: r.rows[0].id, deadline: r.rows[0] });
+  } catch (err) {
+    console.error('POST /admin/deadlines error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.patch('/deadlines/:id', admin, async (req, res) => {

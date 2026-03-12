@@ -1,70 +1,65 @@
+require('dotenv').config();
 const Anthropic = require('@anthropic-ai/sdk');
 const { pool }  = require('./db');
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM = `You are the BTECHPLUS Campus Pathway AI — a warm, expert guide helping Kenyan students navigate education after KCSE.
+const SYSTEM = `You are BTECHPLUS AI — a friendly, expert assistant for Kenyan secondary school students navigating KUCCPS, KMTC, TVET, and university admissions.
 
-DEEP KNOWLEDGE BASE:
-- KUCCPS process: students.kuccps.net, opens May–June yearly, needs KCSE index + KNEC cert number
-- 20 degree clusters (1A–20A) with specific subject requirements
-- All KMTC programmes K01–K34 with grade cutoffs and campus locations
-- TVET: Artisan (D-/below), Certificate (D), Diploma (C-) — all categories
-- 21 PTTCs (Primary Teacher Training Colleges)
-- HELB loans, NG-CDF bursaries, county bursaries, Equity Wings to Fly, KCB Foundation, Mastercard Foundation
-- Cluster formula: 4 subjects × max 12 pts = 48 total. A=12,A−=11,B+=10,B=9,B−=8,C+=7,C=6,C−=5,D+=4,D=3,D−=2
-- 2024 cut-offs: MBChB UoN 42.8, Law UoN 43.6, Engineering(Civil) UoN 39.2, CompSci UoN 36.4
+You help with:
+- KUCCPS cluster points, course requirements, cut-off points
+- KMTC and TVET college applications and requirements
+- How to apply, deadlines, and required documents
+- Understanding the Kenyan education system (KCSE → university/college)
+- Career guidance for Kenyan students
 
-KEY KMTC FACTS:
-- K04 Community Health Nursing: C plain, 30 campuses
-- K32 Clinical Medicine & Surgery: C plain, 44 campuses (most widely available)
-- K28 Community Health Assistant: C−, 46 campuses (most accessible of all)
-- K08 Medical Lab Sciences: C plain, 12 campuses
-- K02 Nutrition Diploma: C−, 7 campuses
-- K15 Public Health Diploma: C plain, 9 campuses
+Keep responses concise (max 200 words), friendly, and use simple English. Format with bullet points when listing items. Always encourage students.
 
-STYLE: Warm, encouraging, Kenya-specific. Use simple English. Mix occasional Swahili (asante, karibu, sawa). Under 200 words unless comparison needed. Always end with a clear next step or offer to help further. Never invent grades or institutions.`;
+If asked something outside education/admissions, politely redirect to your area of expertise.`;
 
-// Local fallback KB — used when Anthropic credits run out
-const LOCAL_KB = [
-  { keys:['hello','hi','hey','hujambo','habari'], ans:'Karibu! Welcome to BTECHPLUS 🇰🇪. I can help with KCSE course placement, cluster points, KUCCPS, KMTC, TVET, HELB loans, and more. What would you like to know?' },
-  { keys:['medicine','mbchb','doctor'], ans:'MBChB requires mean grade A− to A. Cluster 13A: BIO B, CHE B, PHY/MAT B, ENG B. Universities: UoN, Moi, JKUAT, Egerton, Kabarak. Cut-off ~42.8/48 at UoN. Apply via KUCCPS.' },
-  { keys:['nursing','nurse','kmtc nurs'], ans:'KMTC Diploma Nursing (K04) requires C plain. Available at 30 campuses: Nairobi, Mombasa, Kisumu, Nakuru, Eldoret and more. Certificate Enrolled Nursing (K23) requires C−. Apply via KUCCPS or kmtc.ac.ke.' },
-  { keys:['clinical','clinical officer','clinical medicine'], ans:'KMTC Clinical Medicine & Surgery (K32) requires C plain. Available at 44 campuses — the most widely available KMTC programme. Subjects: ENG/KIS C, BIO C, CHE/PSC C−, PHY/MAT A C−.' },
-  { keys:['pharmacy'], ans:'KMTC Diploma Pharmacy (K12) requires C plain. Available at: Kisumu, Manza, Mombasa, Nairobi, Nakuru, Nyeri. University B.Pharmacy requires A− or above.' },
-  { keys:['lab','laboratory','medical lab'], ans:'KMTC Medical Laboratory Sciences (K08) requires C plain. Available at 12 campuses: Embu, Kakamega, Kisii, Kitui, Machakos, Meru, Nairobi, Nakuru, Nyeri and more.' },
-  { keys:['community health','cha'], ans:'KMTC Community Health Assistant (K28) requires C− only. Available at 46 campuses — the most accessible programme including Mandera, Garissa, Lodwar, Tana River.' },
-  { keys:['cluster','cluster points','calculate'], ans:'Cluster = sum of 4 subject grades (max 48). Grades: A=12, A−=11, B+=10, B=9, B−=8, C+=7, C=6, C−=5, D+=4, D=3, D−=2, E=1. Use the Cluster Calculator on this page!' },
-  { keys:['kuccps','portal','apply','placement'], ans:'KUCCPS portal (students.kuccps.net) opens May–June after KCSE results. You need your KCSE index number + KNEC certificate number. Select programmes in order of preference. Apply within 2 weeks of portal opening.' },
-  { keys:['helb','loan','bursary','scholarship'], ans:'Apply for HELB loan at helb.co.ke after admission. Also check: NG-CDF bursaries (your MP office), county bursaries (January–March), Equity Wings to Fly, KCB Foundation, Mastercard Foundation.' },
-  { keys:['tvet','vocational','artisan'], ans:'TVET: Artisan certificate requires D− or below. Certificate requires D plain. Diploma requires C−. No specific subject requirements for most TVET courses. Apply via KUCCPS TVET portal.' },
-  { keys:['kmtc'], ans:'KMTC has 40+ campuses Kenya-wide. Requirements range from C− to C plain depending on programme. Popular courses: Clinical Medicine (K32), Nursing (K04), Lab Sciences (K08), Community Health (K28). Apply via KUCCPS or kmtc.ac.ke.' },
-  { keys:['engineering','electrical','mechanical','civil'], ans:'Engineering degrees require B+ or above. Cluster 5A: MAT A C+, PHY C+, CHE C+, ENG C+. Universities: UoN, JKUAT, TUK, Moi, Dedan Kimathi. TVET Engineering Diplomas only require C−.' },
-  { keys:['computer','ict','software','programming'], ans:'BSc Computer Science (Cluster 7A): MAT A C+, PHY C+, ENG C. Available at UoN, JKUAT, Strathmore, Moi, KU, USIU. BSc IT (Cluster 7C): MAT A C plain. TVET Diploma ICT available from C−.' },
-  { keys:['law','llb'], ans:'LLB requires A− to B+ depending on university. Cluster 1: ENG/KIS B plain. Universities: UoN, Moi, KU, MKU, Kabarak, Catholic, USIU. After graduation: Kenya School of Law (Advocates Training Programme).' },
-  { keys:['d plain','d grade','low grade','failed'], ans:'With D plain: TVET Certificate programmes available in Business, Computing, Tourism, Agriculture, Clothing & Textile — 2-year programmes. With D−: Artisan certificates (1 year) in electrical, plumbing, carpentry, motor vehicle.' },
-  { keys:['c minus','c-','certificate programme'], ans:'With C−: KMTC Certificate programmes (K22–K34), TVET Diplomas in Business/Engineering/Computing/Tourism, and some private university degrees. Many great options!' },
-  { keys:['teacher','ttc','p1','primary teacher'], ans:'Primary Teacher Training (P1) requires C plain. 21 public PTTCs including Highridge, Kagumo, Kamwenja, Thogoto, Mosoriot, Tambach. 2-year programme. B.Ed Secondary requires B− or above.' },
-  { keys:['cut off','cutoff','minimum','required points'], ans:'2024 KUCCPS cut-offs (out of 48): MBChB UoN 42.8, Law UoN 43.6, Civil Engineering UoN 39.2, CompSci UoN 36.4, Nursing UoN 34.2, Pharmacy UoN 38.4, Economics UoN 36.2. Points vary each year.' },
+const aiKB = [
+  { keys:['kuccps','apply university','university application','cluster points'], ans:'KUCCPS (Kenya Universities and Colleges Central Placement Service) handles university admissions. Steps: 1) Get KCSE results. 2) Calculate cluster points for your desired courses. 3) Apply at kuccps.net during the application window. 4) Select up to 6 courses in order of preference. Check deadlines on our Deadlines Ticker above!' },
+  { keys:['kmtc','medical training','nursing','clinical officer'], ans:'KMTC (Kenya Medical Training College) offers medical courses: Clinical Medicine, Nursing, Pharmacy, Nutrition, Medical Lab, etc. Requirements: KCSE C+ or better (varies by course). Apply at kmtc.ac.ke or through KUCCPS. Campuses nationwide. Very competitive — apply early!' },
+  { keys:['cluster','calculate','points'], ans:'Cluster points are calculated from 4 subjects relevant to your chosen course, divided by 4, then multiplied by 12. For example: If you scored A(12), B+(10), B(9), C+(7) in your cluster subjects → (12+10+9+7)/4 × 12 = 114/4 = 28.5 × 12? No — correct formula: (sum of 4 subject points out of 12 each) / 4. Max is 12.000. Use our Cluster Calculator on this page!' },
+  { keys:['grade','c+','c plain','b-','requirement'], ans:'Minimum KCSE grades for popular courses: Medicine C+ overall + B+ in Biology & Chemistry. Nursing C+. Engineering C+ + B in Maths & Physics. Computer Science C+. Teaching C+ (degree) or C- (diploma). Law B+. Always check specific cut-off points at kuccps.net as they change yearly.' },
+  { keys:['helb','loan','fee','pay','afford'], ans:'HELB (Higher Education Loans Board) provides loans for university students. Apply at hef.co.ke after getting placement. Loan ranges: KES 35,000–60,000/year. You repay after employment. Also check: NG-CDF bursaries (your MP\'s office), county bursaries (January–March annually), and scholarships from Equity Foundation, KCB, and Mastercard Foundation.' },
+  { keys:['tvet','technical','vocational'], ans:'TVET colleges offer practical courses: Electrical, Plumbing, Carpentry, ICT, Fashion Design, Catering, Motor Vehicle, etc. Entry: KCPE or KCSE (any grade). Duration: 6 months – 3 years. Apply directly to TVET institutions or through KUCCPS TVET portal. Government-sponsored slots available — very affordable!' },
+  { keys:['deadline','when','date','application window'], ans:'Application deadlines change each year. Check the Application Deadlines section on this page for current KUCCPS, KMTC, HELB, and TVET deadlines. Generally: KUCCPS opens May–June for March intake, and Oct–Nov for September intake. Set reminders — missing deadlines means waiting another cycle!' },
+  { keys:['bursary','scholarship','cdf','county fund'], ans:'Bursary options: 1) HELB loan (hef.co.ke). 2) NG-CDF bursaries — your local MP office or ngcdf.go.ke. 3) County bursaries — county offices, usually Jan–March. 4) Equity Wings to Fly, KCB Foundation, Mastercard Foundation scholarships. Apply to as many as possible — they stack!' },
+  { keys:['cut off','cutoff','minimum points','minimum grade'], ans:'2024 cluster cut-offs (out of 12.000): Medicine UoN ~42.8pts equiv, Law UoN ~43.6, Engineering ~39.2, Computer Science ~36.4, Nursing ~34.2. Points vary every cycle depending on competition. Your actual cluster score matters most — calculate yours using our Cluster Calculator!' },
+  { keys:['support','donate','mpesa','paybill'], ans:'BTECHPLUS is completely free for all Kenyan students. If this tool helped you, support us via M-Pesa Till: 3348765 (Account: BTechPlus). Even KES 50 helps keep this service running. Click "Support Us 💚" at the top of the page. Asante sana!' },
 ];
 
-function localFallback(msg) {
-  const q = msg.toLowerCase();
-  for (const entry of LOCAL_KB) {
+function localFallback(message) {
+  const q = message.toLowerCase();
+  for (const entry of aiKB) {
     if (entry.keys.some(k => q.includes(k))) return entry.ans;
   }
-  return 'Samahani, I could not find a specific answer for that. Please try asking about a specific course, grade, or application process. You can also browse the Courses section on this page for detailed information!';
+  return 'Samahani, I could not find a specific answer for that. Please ask about courses, cluster points, KUCCPS, KMTC, HELB, or application deadlines. You can also browse the Courses section on this page!';
 }
 
 async function chat(sessionId, userMessage) {
   // Try Claude API first
   try {
     const hist = await pool.query(
-      `SELECT role, content FROM ai_conversations WHERE session_id=$1 ORDER BY created_at DESC LIMIT 8`,
+      `SELECT role, content FROM ai_conversations
+       WHERE session_id=$1
+       ORDER BY created_at DESC LIMIT 12`,
       [sessionId]
     );
-    const history = hist.rows.reverse().map(r => ({ role: r.role, content: r.content }));
 
+    // Build history — skip admin-injected rows and ensure proper alternation
+    const rawHistory = hist.rows.reverse();
+    const history = [];
+    for (const r of rawHistory) {
+      // Map 'admin' role → 'assistant' for the Claude API
+      const apiRole = (r.role === 'user') ? 'user' : 'assistant';
+      // Skip consecutive same roles (Claude requires strict alternation)
+      if (history.length > 0 && history[history.length - 1].role === apiRole) continue;
+      history.push({ role: apiRole, content: r.content });
+    }
+
+    // Save user message
     await pool.query(
       `INSERT INTO ai_conversations (session_id, role, content) VALUES ($1, 'user', $2)`,
       [sessionId, userMessage]
@@ -87,20 +82,33 @@ async function chat(sessionId, userMessage) {
     return { reply, source: 'claude' };
 
   } catch (err) {
-    // API credits exhausted or any other error — use local KB
-    const isCreditsError = err.status === 400 && err.message?.includes('credit');
-    console.warn(isCreditsError
-      ? '⚠️  Anthropic credits exhausted — using local KB fallback'
-      : '⚠️  Claude API error — using local KB fallback: ' + err.message
-    );
+    console.error('Claude API error:', err.message);
+
+    // Save user message even on Claude failure
+    try {
+      await pool.query(
+        `INSERT INTO ai_conversations (session_id, role, content) VALUES ($1, 'user', $2)`,
+        [sessionId, userMessage]
+      );
+    } catch (_) {}
+
     const reply = localFallback(userMessage);
+
+    try {
+      await pool.query(
+        `INSERT INTO ai_conversations (session_id, role, content) VALUES ($1, 'assistant', $2)`,
+        [sessionId, reply]
+      );
+    } catch (_) {}
+
     return { reply, source: 'local' };
   }
 }
 
 async function getHistory(sessionId) {
   const r = await pool.query(
-    `SELECT role, content, created_at FROM ai_conversations WHERE session_id=$1 ORDER BY created_at ASC LIMIT 50`,
+    `SELECT role, content, created_at FROM ai_conversations
+     WHERE session_id=$1 ORDER BY created_at ASC LIMIT 50`,
     [sessionId]
   );
   return r.rows;

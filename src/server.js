@@ -20,8 +20,6 @@ const cors     = require('cors');
 const helmet   = require('helmet');
 const morgan   = require('morgan');
 const { initDB } = require('./db');
-const authRoutes      = require('./routes/auth.routes');
-const deadlineRoutes  = require('./routes/deadlines.routes');
 
 const app = express();
 
@@ -35,61 +33,58 @@ app.use(cors({
 app.use(express.json({ limit: '2mb' }));
 app.use(morgan('combined'));
 
-// Routes
-const { router: authRouter }  = require('./routes/auth.routes');
-const mpesaRouter   = require('./routes/mpesa.routes');
-const aiRouter      = require('./routes/ai.routes');
-const forumRouter   = require('./routes/forum.routes');
-const adminRouter   = require('./routes/admin.routes');
+// ── Routes ────────────────────────────────────────────────
+const { router: authRouter } = require('./routes/auth.routes');
+const mpesaRouter    = require('./routes/mpesa.routes');
+const aiRouter       = require('./routes/ai.routes');
+const forumRouter    = require('./routes/forum.routes');
+const adminRouter    = require('./routes/admin.routes');
 const bookingsRouter = require('./routes/bookings.routes');
+const deadlineRouter = require('./routes/deadlines.routes');  // ← was imported but never used
 
-app.use('/api/auth',     authRouter);
-app.use('/api/mpesa',    mpesaRouter);
-app.use('/api/ai',       aiRouter);
-app.use('/api/forum',    forumRouter);
-app.use('/api/admin',    adminRouter);
-app.use('/api/bookings', bookingsRouter);
+app.use('/api/auth',      authRouter);
+app.use('/api/mpesa',     mpesaRouter);
+app.use('/api/ai',        aiRouter);
+app.use('/api/forum',     forumRouter);
+app.use('/api/admin',     adminRouter);
+app.use('/api/bookings',  bookingsRouter);
+app.use('/api/deadlines', deadlineRouter);  // ← THIS was missing — caused the 404
 
-app.get('/', (req, res) => res.json({ service: 'BTECHPLUS API v2.0', status: 'online', docs: '/api/health' }));
+// ── Health & root ─────────────────────────────────────────
+app.get('/', (req, res) => res.json({ service: 'BTECHPLUS API v2.0', status: 'online' }));
+
+// UptimeRobot pings this — MUST be before app.listen()
+app.get('/health', (req, res) => res.json({ status: 'ok', version: '2.0.0', time: new Date().toISOString(), service: 'BTECHPLUS API' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '2.0.0', time: new Date().toISOString() }));
+
+// 404 fallback — must be last
 app.use((req, res) => res.status(404).json({ error: `Route ${req.path} not found` }));
 
+// ── Start server ──────────────────────────────────────────
 const PORT = parseInt(process.env.PORT) || 3000;
 
 initDB()
   .then(() => {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 BTECHPLUS API v2 running on port ${PORT}`);
-      console.log(`https://donate-erxu.onrender.com`);
+      console.log(`   https://donate-erxu.onrender.com`);
+
+      // Self-ping every 14 min — keeps Render from sleeping
+      const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://donate-erxu.onrender.com';
+      setInterval(() => {
+        try {
+          require('https').get(SELF_URL + '/health', (r) => {
+            console.log(`[keep-alive] ping OK ${new Date().toISOString()} — status ${r.statusCode}`);
+          }).on('error', (e) => {
+            console.warn('[keep-alive] ping failed:', e.message);
+          });
+        } catch(e) {}
+      }, 14 * 60 * 1000);
+
+      console.log('[keep-alive] Self-ping initialized — server will not sleep');
     });
   })
   .catch(err => {
     console.error('❌ Startup failed:', err.message);
     process.exit(1);
   });
-
-
-// ═══════════════════════════════════════════════════════════
-// ADD THIS TO THE BOTTOM OF src/server.js
-// Self-ping every 14 minutes to prevent Render from sleeping
-// ═══════════════════════════════════════════════════════════
-
-// Health check endpoint (UptimeRobot pings this)
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString(), service: 'BTECHPLUS API' });
-});
-
-// Self-ping — keeps the dyno alive even without external pings
-const SELF_URL = process.env.RENDER_EXTERNAL_URL || process.env.BASE_URL || 'https://donate-erxu.onrender.com';
-setInterval(async () => {
-  try {
-    const https = require('https');
-    https.get(SELF_URL + '/health', (res) => {
-      console.log(`[keep-alive] ping OK — ${new Date().toISOString()}`);
-    }).on('error', (e) => {
-      console.warn('[keep-alive] ping failed:', e.message);
-    });
-  } catch(e) {}
-}, 14 * 60 * 1000); // every 14 minutes
-
-console.log('[keep-alive] Self-ping initialized — server will not sleep');

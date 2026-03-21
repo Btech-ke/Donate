@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const { pool } = require('../db');
+const { sendAdminNotification } = require('../notify');
 
 // GET /api/forum/posts
 router.get('/posts', async (req, res) => {
@@ -22,6 +23,13 @@ router.post('/posts', async (req, res) => {
       `INSERT INTO forum_posts (username, message, user_id) VALUES ($1, $2, $3) RETURNING *`,
       [username.trim().slice(0,80), message.trim().slice(0,1000), user_id || null]
     );
+
+    // ── Notify admin of new forum post ──
+    sendAdminNotification({
+      subject: '❓ New Forum Question — BTECHPLUS',
+      body: `<strong>${username}</strong> posted:<br><br>"${message}"<br><br>Reply in the admin panel.`
+    });
+
     res.json(r.rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -51,12 +59,5 @@ router.delete('/posts/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
-
-
-   const { sendAdminNotification } = require('../notify');
-   sendAdminNotification({
-     subject: '❓ New Forum Question — BTECHPLUS',
-     body: `<strong>${username}</strong> posted:<br><br>"${message}"<br><br>Reply in the admin panel.`
-  });
 
 module.exports = router;

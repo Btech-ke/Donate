@@ -67,3 +67,29 @@ initDB()
     console.error('❌ Startup failed:', err.message);
     process.exit(1);
   });
+
+
+// ═══════════════════════════════════════════════════════════
+// ADD THIS TO THE BOTTOM OF src/server.js
+// Self-ping every 14 minutes to prevent Render from sleeping
+// ═══════════════════════════════════════════════════════════
+
+// Health check endpoint (UptimeRobot pings this)
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString(), service: 'BTECHPLUS API' });
+});
+
+// Self-ping — keeps the dyno alive even without external pings
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || process.env.BASE_URL || 'https://donate-erxu.onrender.com';
+setInterval(async () => {
+  try {
+    const https = require('https');
+    https.get(SELF_URL + '/health', (res) => {
+      console.log(`[keep-alive] ping OK — ${new Date().toISOString()}`);
+    }).on('error', (e) => {
+      console.warn('[keep-alive] ping failed:', e.message);
+    });
+  } catch(e) {}
+}, 14 * 60 * 1000); // every 14 minutes
+
+console.log('[keep-alive] Self-ping initialized — server will not sleep');

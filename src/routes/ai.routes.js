@@ -56,4 +56,10 @@ router.post('/admin-reply', async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+
+   const { sendAdminNotification } = require('../notify');
+   sendAdminNotification({
+     subject: '💬 New AI Chat Message — BTECHPLUS',
+     body: `Session: <code>${sessionId}</code><br><br>Message: "${message}"<br><br>Go to Admin → AI Chats to reply.`
+  });
 module.exports = router;

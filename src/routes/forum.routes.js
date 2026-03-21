@@ -52,4 +52,11 @@ router.delete('/posts/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+   const { sendAdminNotification } = require('../notify');
+   sendAdminNotification({
+     subject: '❓ New Forum Question — BTECHPLUS',
+     body: `<strong>${username}</strong> posted:<br><br>"${message}"<br><br>Reply in the admin panel.`
+  });
+
 module.exports = router;

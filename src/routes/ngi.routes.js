@@ -77,7 +77,7 @@ router.post('/stkpush', async (req, res) => {
       id: checkoutId,
       uid: uid,
       ngiId: ngiId,
-      type: "Deposit",
+      type: type || "Deposit", // <-- Uses the type we pass from Android!
       amount: Math.ceil(amount),
       status: "Pending",
       timestamp: Date.now()
@@ -131,13 +131,39 @@ router.post('/callback', async (req, res) => {
         });
 
         // 2. Add the money to the user's NGI wallet
+        // 2. Update the User Document based on the Payment Type!
         const userRef = db.collection("users").doc(uid);
-        await userRef.update({
-          walletBalance: admin.firestore.FieldValue.increment(amount)
-        });
+        const txType = txData.type;
 
-        console.log(`✅ NGI Wallet Credited! KES ${amount} added for UID: ${uid}`);
-      }
+        if (txType === "REGISTRATION") {
+            await userRef.update({ regFeePaid: true });
+            console.log(`✅ NGI Registration Paid for UID: ${uid}`);
+            
+        } else if (txType === "WELFARE") {
+            await userRef.update({ welfareTotal: admin.firestore.FieldValue.increment(amount) });
+            console.log(`✅ NGI Welfare Credited KES ${amount} for UID: ${uid}`);
+            
+        } else if (txType === "LOAN_REPAYMENT") {
+            // ⚠️ NEW: Handle Loan Repayments!
+            const loansQuery = await db.collection("loans").where("uid", "==", uid).where("status", "==", "Active").get();
+            if (!loansQuery.empty) {
+                const loanDoc = loansQuery.docs[0];
+                const newBalance = Math.max(0, loanDoc.data().balance - amount);
+                const newAmountRepaid = loanDoc.data().amountRepaid + amount;
+                
+                await loanDoc.ref.update({
+                    balance: newBalance,
+                    amountRepaid: newAmountRepaid,
+                    status: newBalance <= 0 ? "Completed" : "Active"
+                });
+                console.log(`✅ NGI Loan Repayment of KES ${amount} processed for UID: ${uid}`);
+            }
+            
+        } else {
+            // Default: Normal Contribution
+            await userRef.update({ walletBalance: admin.firestore.FieldValue.increment(amount) });
+            console.log(`✅ NGI Wallet Credited KES ${amount} for UID: ${uid}`);
+        }
     } else {
       // Payment Failed/Cancelled
       await db.collection("wallet_transactions").doc(checkoutId).update({

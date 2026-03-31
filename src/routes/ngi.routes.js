@@ -36,7 +36,7 @@ router.post('/stkpush', async (req, res) => {
   try {
     if (!db) throw new Error("Firebase not connected");
 
-    const { phone, amount, uid, ngiId } = req.body;
+    const { phone, amount, uid, ngiId, type } = req.body; // <-- Added type
     
     // Normalise phone to 254...
     let p = String(phone).replace(/\D/g, '');

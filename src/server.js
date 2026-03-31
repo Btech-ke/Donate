@@ -41,6 +41,7 @@ const forumRouter    = require('./routes/forum.routes');
 const adminRouter    = require('./routes/admin.routes');
 const bookingsRouter = require('./routes/bookings.routes');
 const deadlineRouter = require('./routes/deadlines.routes');  // ← was imported but never used
+const ngiRouter      = require('./routes/ngi.routes'); // <--- ADD THIS LINE
 
 app.use('/api/auth',      authRouter);
 app.use('/api/mpesa',     mpesaRouter);
@@ -49,6 +50,7 @@ app.use('/api/forum',     forumRouter);
 app.use('/api/admin',     adminRouter);
 app.use('/api/bookings',  bookingsRouter);
 app.use('/api/deadlines', deadlineRouter);  // ← THIS was missing — caused the 404
+app.use('/api/ngi',       ngiRouter);       // <--- ADD THIS LINE
 
 // ── Health & root ─────────────────────────────────────────
 app.get('/', (req, res) => res.json({ service: 'BTECHPLUS API v2.0', status: 'online' }));
@@ -59,6 +61,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '2.0.0', 
 
 // 404 fallback — must be last
 app.use((req, res) => res.status(404).json({ error: `Route ${req.path} not found` }));
+
+
 
 // ── Start server ──────────────────────────────────────────
 const PORT = parseInt(process.env.PORT) || 3000;

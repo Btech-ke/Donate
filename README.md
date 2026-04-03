@@ -115,3 +115,4 @@ Tables created automatically on first startup:
 - Render free tier spins down after 15 min inactivity — first request may take ~30s to wake
 - M-Pesa callbacks only work with HTTPS (Render provides this automatically)
 - Keep `.env` out of git — use Render dashboard for secrets
+"# NGI" 

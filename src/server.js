@@ -74,7 +74,7 @@ initDB()
       console.log(`   https://donate-erxu.onrender.com`);
 
       // Self-ping every 14 min — keeps Render from sleeping
-      const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://donate-erxu.onrender.com';
+      const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://ngi-mpesa-backend.onrender.com';
       setInterval(() => {
         try {
           require('https').get(SELF_URL + '/health', (r) => {
